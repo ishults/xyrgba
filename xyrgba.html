@@ -1,0 +1,155 @@
+<html style='margin: 0; padding: 0;'>
+<body style='margin: 0; padding: 0; overflow: hidden;'>
+<canvas id='main'></canvas>
+</body>
+<footer>
+<script src="https://www.tmijs.org/js/latest/1.x/tmi.min.js"></script>
+<script>
+var SIZE = 4;
+var TOTAL_WIDTH = 1920;
+var TOTAL_HEIGHT = 1080;
+var TIMEOUT = 2 * 60 * 1000;
+var CLEAR_USERS_TIMEOUT = .1 * 60 * 1000;
+var WIDTH = TOTAL_WIDTH / SIZE;
+var HEIGHT = TOTAL_HEIGHT / SIZE;
+var MAGIC_WORD = 'xyrgba: ';
+var KILL_SWITCH = 'hcf';
+
+var nick = '$yourNick';
+var auth = '$yourKey';
+var channel = '$yourChannel';
+  
+var users = {};
+var client;
+var canvas = document.getElementById('main');
+var context = canvas.getContext('2d');
+  
+function init() {
+  initUsers();
+  initCanvas();
+  initClient();
+}
+
+function initUsers() {
+  makeUserClearTimeout();
+}
+
+function makeUserClearTimeout() {
+  setTimeout(function() {
+    var now = Date.now();
+  
+    for (var key in users) {
+      if (users.hasOwnProperty(key) && users[key] < (now - TIMEOUT)) {
+        delete users[key];
+      }
+    }
+    
+    makeUserClearTimeout();
+  }, CLEAR_USERS_TIMEOUT);
+}
+
+function initCanvas() {
+  canvas.width = TOTAL_WIDTH;
+  canvas.height = TOTAL_HEIGHT;
+  
+  canvas.addEventListener('click', function(event){
+    var size = SIZE * 8;
+    var xPos = event.clientX / size;
+    var yPos = event.clientY / size;
+    
+    doColor(xPos, yPos, 0, 255, 255, 155, size);
+  },false);
+}
+
+function initClient() {  
+  var clientOptions = {
+      options: {
+          debug: true
+      },
+      connection: {
+          reconnect: true
+      },
+      identity: {
+          username: nick,
+          password: auth
+      },
+      channels: [ channel ]
+  };
+  
+  client = new tmi.client(clientOptions);
+
+  client.on("message", function (channel, user, message, self) {
+      if(user["message-type"] === 'chat') {
+        try {
+          parseMessage(user, message);
+        } catch(ex) {
+          console.error('Ruh roh:' + user["display-name"]);
+        }
+      }
+  });    
+      
+  client.connect();
+}
+
+function parseMessage(user, message) {
+  var name = user["display-name"];
+  var time = user["sent-ts"];
+  var isMod = user["mod"];
+  var now = Date.now();
+  
+  if (name === nick && message === KILL_SWITCH) {
+    location.reload(); 
+    return;
+  }
+  
+  if (!isMod && (now - time > TIMEOUT)) {
+    return;
+  }
+  
+  delete users[name];
+  
+  if (!message.startsWith(MAGIC_WORD)) {
+    return;
+  }
+  
+  var parts = message.split(' ');
+  
+  if (parts.length != 7) {
+    return;
+  }
+  
+  try {
+    var x = parseInt(parts[1]);
+    var y = parseInt(parts[2]);
+    var r = parseInt(parts[3]);
+    var g = parseInt(parts[4]);
+    var b = parseInt(parts[5]);
+    var a = parseInt(parts[6]);
+    
+    if (x >= 0 && x <= (WIDTH - SIZE) &&
+      y >= 0 && y <= (HEIGHT - SIZE) &&
+      r >= 0 && r <= 255 &&
+      g >= 0 && g <= 255 &&
+      b >= 0 && b <= 255 &&
+      a >= 0 && a <= 255
+    )
+    
+    doColor(x, y, r, g, b, a, size);
+    
+    users[name] = time;
+    
+  } catch (ex) {
+    console.log(ex);
+  
+    return;
+  }
+}
+
+function doColor(x, y, r, g, b, a, size) {
+  context.fillStyle = "rgba(" + r + "," + g + "," + b + "," + (a / 255) + ")";
+  context.fillRect( x * size, y * size, size, size);
+}
+
+init();
+</script>
+</footer></html>
